@@ -13,7 +13,7 @@
     :root {
       --ink:#17323b; --muted:#58727a; --paper:#f5f0df; --paper-strong:#fffdf5;
       --sea:#217e94; --sea-dark:#155d70; --leaf:#4f8a56; --leaf-dark:#2f6540;
-      --sand:#e7c77c; --gold:#f3d36b; --red:#b65e52; --line:rgba(23,50,59,.16);
+      --sand:#e7c77c; --gold:#f3d36b; --red:#b65e52;
       --shadow:0 18px 50px rgba(20,55,65,.13); --pixel:"DotGothic16",monospace;
       --body:"Noto Sans JP",sans-serif;
     }
@@ -52,6 +52,18 @@
     .quest-mark{display:grid;flex:0 0 34px;height:34px;place-items:center;border:2px solid var(--ink);font-family:var(--pixel);background:var(--gold)}
     .quest-note strong{display:block;margin-bottom:2px;font-family:var(--pixel);font-weight:400}
 
+    .pixel-walkway{position:relative;height:72px;margin:-10px 0 24px;overflow:hidden;border-bottom:4px solid var(--leaf-dark)}
+    .pixel-walkway::before{position:absolute;left:0;right:0;bottom:4px;height:10px;content:"";background:repeating-linear-gradient(90deg,#8cbf62 0 10px,#74a957 10px 20px)}
+    .pixel-walkway::after{position:absolute;left:0;right:0;bottom:14px;height:4px;content:"";background:repeating-linear-gradient(90deg,transparent 0 24px,rgba(47,101,64,.35) 24px 28px)}
+    .walker{position:absolute;z-index:2;bottom:14px;left:0;width:32px;height:38px;animation:walk-across 13s linear infinite alternate}
+    .walker.second{animation-duration:18s;animation-delay:-7s}
+    .pixel-person{position:relative;width:28px;height:32px;animation:step-bob .34s steps(2,end) infinite;filter:drop-shadow(3px 3px 0 rgba(23,50,59,.2))}
+    .pixel-person::before{position:absolute;top:0;left:6px;width:16px;height:14px;content:"";background:#f3d39b;box-shadow:0 -4px 0 #47656c,4px -4px 0 #47656c,12px -4px 0 #47656c,-4px 4px 0 #f3d39b,16px 4px 0 #f3d39b,4px 5px 0 #17323b,12px 5px 0 #17323b}
+    .pixel-person::after{position:absolute;top:15px;left:4px;width:20px;height:13px;content:"";background:#3b86a0;box-shadow:-4px 2px 0 #2e6578,20px 2px 0 #2e6578,2px 13px 0 #17323b,14px 13px 0 #17323b,2px 17px 0 #17323b,14px 17px 0 #17323b}
+    .walker.second .pixel-person::after{background:#64a358;box-shadow:-4px 2px 0 #44773f,20px 2px 0 #44773f,2px 13px 0 #17323b,14px 13px 0 #17323b,2px 17px 0 #17323b,14px 17px 0 #17323b}
+    .pixel-speech{position:absolute;bottom:51px;left:20px;padding:2px 7px;border:2px solid var(--ink);font-family:var(--pixel);font-size:.65rem;white-space:nowrap;background:#fffdf5;box-shadow:3px 3px 0 rgba(23,50,59,.2);opacity:0;animation:speech-pop 13s steps(1,end) infinite}
+    .walker.second .pixel-speech{animation-duration:18s;animation-delay:-7s}
+
     .project-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;counter-reset:project}
     .project-card{position:relative;display:flex;min-height:266px;flex-direction:column;overflow:hidden;padding:58px 24px 24px;border:2px solid var(--ink);background:#fffaf0;box-shadow:6px 6px 0 rgba(23,50,59,.18);transition:transform .18s ease,box-shadow .18s ease,filter .18s ease;counter-increment:project}
     .project-card::before{position:absolute;top:0;left:0;display:flex;width:100%;height:38px;align-items:center;padding:0 12px;content:"FILE 0" counter(project);border-bottom:2px solid var(--ink);color:#eaf5ed;font-family:var(--pixel);font-size:.72rem;letter-spacing:.08em;background:var(--sea-dark)}
@@ -78,9 +90,12 @@
     .reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease}.reveal.visible{opacity:1;transform:translateY(0)}
     @keyframes hero-in{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
     @keyframes cursor-blink{50%{opacity:.35}}
-    @media(max-width:820px){.project-grid{grid-template-columns:1fr}.project-card{min-height:220px}.select-cursor{opacity:.65;transform:none}}
+    @keyframes walk-across{from{left:0}to{left:calc(100% - 42px)}}
+    @keyframes step-bob{0%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+    @keyframes speech-pop{0%,64%,100%{opacity:0;transform:translateY(4px)}65%,76%{opacity:1;transform:translateY(0)}}
+    @media(max-width:820px){.project-grid{grid-template-columns:1fr}.project-card{min-height:220px}.select-cursor{opacity:.65;transform:none}.pixel-walkway{height:62px}.walker.second{display:none}}
     @media(max-width:640px){.nav-links{gap:12px}.nav-links li:nth-child(2){display:none}.hero{min-height:610px;padding-top:104px}.hero-actions{flex-direction:column;align-items:center}.button{width:min(280px,100%)}main{margin-top:-34px}.section{padding:28px 20px}.section-heading{align-items:flex-start;flex-direction:column}.section-heading>span{padding-left:44px}.links-grid{grid-template-columns:1fr}.quest-note{padding:14px}.project-card{padding-left:20px;padding-right:20px}}
-    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hero-content,.reveal,.select-cursor{animation:none;transition:none}.reveal{opacity:1;transform:none}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hero-content,.reveal,.select-cursor,.walker,.pixel-person,.pixel-speech{animation:none;transition:none}.reveal{opacity:1;transform:none}.walker{left:12px}.pixel-speech{display:none}}
   </style>
 </head>
 <body>
@@ -116,6 +131,11 @@
       </div>
       <div class="quest-note"><span class="quest-mark">!</span><div><strong>NEXT GOAL</strong><p>より多くの人に遊んでもらえる作品を完成させ、いつかSteamでリリースすること。</p></div></div>
     </section>
+
+    <div class="pixel-walkway" aria-hidden="true">
+      <div class="walker"><span class="pixel-speech">ピコッ</span><div class="pixel-person"></div></div>
+      <div class="walker second"><span class="pixel-speech">制作中...</span><div class="pixel-person"></div></div>
+    </div>
 
     <section class="section reveal" id="projects" aria-labelledby="developing-title">
       <div class="section-heading"><div class="section-title-wrap"><span class="section-icon">▶</span><h2 id="developing-title">開発中の作品</h2></div><span>NOW DEVELOPING</span></div>
