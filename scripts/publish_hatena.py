@@ -24,6 +24,16 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 
+def env(name: str) -> str:
+    """Read a required secret/config value and trim accidental whitespace."""
+    return os.environ[name].strip()
+
+
+def auth_header(hatena_id: str, api_key: str) -> str:
+    token = base64.b64encode(f"{hatena_id}:{api_key}".encode("utf-8")).decode("ascii")
+    return f"Basic {token}"
+
+
 def parse_draft(path: Path) -> tuple[dict[str, str], str]:
     text = path.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
@@ -44,16 +54,15 @@ def parse_draft(path: Path) -> tuple[dict[str, str], str]:
     return meta, body.strip() + "\n"
 
 
-def build_atom(meta: dict[str, str], body: str) -> bytes:
+def build_atom(meta: dict[str, str], body: str, hatena_id: str) -> bytes:
     categories = [x.strip() for x in meta.get("categories", "").split(",") if x.strip()]
     date = meta["date"]
-    # 記事の開発日を保持する。時刻は日本時間正午として扱う。
     updated = datetime.fromisoformat(f"{date}T12:00:00+09:00").isoformat()
     category_xml = "\n".join(f'  <category term="{escape(c)}" />' for c in categories)
     xml = f'''<?xml version="1.0" encoding="utf-8"?>
 <entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
   <title>{escape(meta["title"])}</title>
-  <author><name>{escape(os.environ["HATENA_ID"])}</name></author>
+  <author><name>{escape(hatena_id)}</name></author>
   <content type="text/plain">{escape(body)}</content>
   <updated>{updated}</updated>
 {category_xml}
@@ -66,22 +75,40 @@ def build_atom(meta: dict[str, str], body: str) -> bytes:
     return xml.encode("utf-8")
 
 
-def publish(path: Path) -> None:
-    hatena_id = os.environ["HATENA_ID"]
-    blog_id = os.environ["HATENA_BLOG_ID"]
-    api_key = os.environ["HATENA_API_KEY"]
+def verify_auth(hatena_id: str, blog_id: str, api_key: str) -> None:
+    """Verify credentials against the AtomPub service document before posting."""
+    endpoint = f"https://blog.hatena.ne.jp/{hatena_id}/{blog_id}/atom"
+    req = urllib.request.Request(
+        endpoint,
+        method="GET",
+        headers={
+            "Authorization": auth_header(hatena_id, api_key),
+            "User-Agent": "tioppe-devlog-publisher/1.1",
+        },
+    )
+    print(f"auth check endpoint: {endpoint}")
+    print(f"hatena id length: {len(hatena_id)}, blog id length: {len(blog_id)}, api key length: {len(api_key)}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            response.read(1)
+            print(f"auth check: HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Hatena auth check HTTP {exc.code}: {detail}") from exc
+
+
+def publish(path: Path, hatena_id: str, blog_id: str, api_key: str) -> None:
     endpoint = f"https://blog.hatena.ne.jp/{hatena_id}/{blog_id}/atom/entry"
     meta, body = parse_draft(path)
-    payload = build_atom(meta, body)
-    token = base64.b64encode(f"{hatena_id}:{api_key}".encode()).decode()
+    payload = build_atom(meta, body, hatena_id)
     req = urllib.request.Request(
         endpoint,
         data=payload,
         method="POST",
         headers={
-            "Authorization": f"Basic {token}",
+            "Authorization": auth_header(hatena_id, api_key),
             "Content-Type": "application/atom+xml; charset=utf-8",
-            "User-Agent": "tioppe-devlog-publisher/1.0",
+            "User-Agent": "tioppe-devlog-publisher/1.1",
         },
     )
     try:
@@ -111,8 +138,13 @@ def main() -> int:
     if missing:
         print("missing environment variables: " + ", ".join(missing), file=sys.stderr)
         return 2
+
+    hatena_id = env("HATENA_ID")
+    blog_id = env("HATENA_BLOG_ID")
+    api_key = env("HATENA_API_KEY")
+    verify_auth(hatena_id, blog_id, api_key)
     for path in args.files:
-        publish(path)
+        publish(path, hatena_id, blog_id, api_key)
     return 0
 
 
