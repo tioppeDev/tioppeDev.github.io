@@ -1,37 +1,44 @@
 #!/usr/bin/env python3
-"""Markdown development logs to Hatena Blog drafts via AtomPub.
-
-Draft format:
----
-title: 記事タイトル
-date: 2026-08-09
-categories: ニポラ島日記,Unity,開発日記
----
-本文...
-"""
+"""Markdown development logs to Hatena Blog drafts via AtomPub."""
 
 from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import os
 import sys
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 
 def env(name: str) -> str:
-    """Read a required secret/config value and trim accidental whitespace."""
     return os.environ[name].strip()
 
 
-def auth_header(hatena_id: str, api_key: str) -> str:
-    token = base64.b64encode(f"{hatena_id}:{api_key}".encode("utf-8")).decode("ascii")
-    return f"Basic {token}"
+def wsse_headers(hatena_id: str, api_key: str) -> dict[str, str]:
+    """Build Hatena-compatible WSSE headers.
+
+    PasswordDigest = Base64(SHA1(Nonce + Created + API key))
+    """
+    nonce = os.urandom(20)
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    digest = hashlib.sha1(nonce + created.encode("utf-8") + api_key.encode("utf-8")).digest()
+    password_digest = base64.b64encode(digest).decode("ascii")
+    nonce_b64 = base64.b64encode(nonce).decode("ascii")
+    credentials = (
+        f'UsernameToken Username="{hatena_id}", '
+        f'PasswordDigest="{password_digest}", '
+        f'Nonce="{nonce_b64}", Created="{created}"'
+    )
+    return {
+        "Authorization": 'WSSE profile="UsernameToken"',
+        "X-WSSE": credentials,
+    }
 
 
 def parse_draft(path: Path) -> tuple[dict[str, str], str]:
@@ -56,8 +63,7 @@ def parse_draft(path: Path) -> tuple[dict[str, str], str]:
 
 def build_atom(meta: dict[str, str], body: str, hatena_id: str) -> bytes:
     categories = [x.strip() for x in meta.get("categories", "").split(",") if x.strip()]
-    date = meta["date"]
-    updated = datetime.fromisoformat(f"{date}T12:00:00+09:00").isoformat()
+    updated = datetime.fromisoformat(f"{meta['date']}T12:00:00+09:00").isoformat()
     category_xml = "\n".join(f'  <category term="{escape(c)}" />' for c in categories)
     xml = f'''<?xml version="1.0" encoding="utf-8"?>
 <entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
@@ -76,18 +82,16 @@ def build_atom(meta: dict[str, str], body: str, hatena_id: str) -> bytes:
 
 
 def verify_auth(hatena_id: str, blog_id: str, api_key: str) -> None:
-    """Verify credentials against the AtomPub service document before posting."""
     endpoint = f"https://blog.hatena.ne.jp/{hatena_id}/{blog_id}/atom"
-    req = urllib.request.Request(
-        endpoint,
-        method="GET",
-        headers={
-            "Authorization": auth_header(hatena_id, api_key),
-            "User-Agent": "tioppe-devlog-publisher/1.1",
-        },
-    )
+    headers = wsse_headers(hatena_id, api_key)
+    headers["User-Agent"] = "tioppe-devlog-publisher/1.2"
+    headers["Accept"] = "application/atomsvc+xml, application/xml, text/xml, */*"
+    req = urllib.request.Request(endpoint, method="GET", headers=headers)
     print(f"auth check endpoint: {endpoint}")
-    print(f"hatena id length: {len(hatena_id)}, blog id length: {len(blog_id)}, api key length: {len(api_key)}")
+    print(
+        f"hatena id length: {len(hatena_id)}, "
+        f"blog id length: {len(blog_id)}, api key length: {len(api_key)}, auth: WSSE"
+    )
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
             response.read(1)
@@ -101,16 +105,14 @@ def publish(path: Path, hatena_id: str, blog_id: str, api_key: str) -> None:
     endpoint = f"https://blog.hatena.ne.jp/{hatena_id}/{blog_id}/atom/entry"
     meta, body = parse_draft(path)
     payload = build_atom(meta, body, hatena_id)
-    req = urllib.request.Request(
-        endpoint,
-        data=payload,
-        method="POST",
-        headers={
-            "Authorization": auth_header(hatena_id, api_key),
+    headers = wsse_headers(hatena_id, api_key)
+    headers.update(
+        {
             "Content-Type": "application/atom+xml; charset=utf-8",
-            "User-Agent": "tioppe-devlog-publisher/1.1",
-        },
+            "User-Agent": "tioppe-devlog-publisher/1.2",
+        }
     )
+    req = urllib.request.Request(endpoint, data=payload, method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
             response_body = response.read()
