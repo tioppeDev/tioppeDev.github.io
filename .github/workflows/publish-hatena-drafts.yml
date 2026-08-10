@@ -1,0 +1,43 @@
+name: Publish Hatena Drafts
+
+on:
+  workflow_dispatch:
+    inputs:
+      drafts:
+        description: "devlog/drafts/ 以下のファイル名。複数はカンマ区切り"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select drafts
+        id: drafts
+        shell: bash
+        env:
+          INPUT_DRAFTS: ${{ inputs.drafts }}
+        run: |
+          set -euo pipefail
+          files=""
+          IFS=',' read -ra names <<< "$INPUT_DRAFTS"
+          for name in "${names[@]}"; do
+            name="$(echo "$name" | xargs)"
+            [[ "$name" != */* ]] || { echo "ファイル名のみ指定してください: $name" >&2; exit 1; }
+            file="devlog/drafts/$name"
+            test -f "$file" || { echo "見つかりません: $file" >&2; exit 1; }
+            files+="$file "
+          done
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+
+      - name: Publish as Hatena drafts
+        env:
+          HATENA_ID: ${{ secrets.HATENA_ID }}
+          HATENA_BLOG_ID: ${{ secrets.HATENA_BLOG_ID }}
+          HATENA_API_KEY: ${{ secrets.HATENA_API_KEY }}
+        run: python3 scripts/publish_hatena.py ${{ steps.drafts.outputs.files }}
