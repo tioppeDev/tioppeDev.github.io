@@ -3,9 +3,9 @@ name: Publish Hatena Drafts
 on:
   workflow_dispatch:
     inputs:
-      draft:
-        description: "devlog/drafts/ 以下のファイル名。空欄なら未投稿候補をすべて送信"
-        required: false
+      drafts:
+        description: "devlog/drafts/ 以下のファイル名。複数はカンマ区切り"
+        required: true
         type: string
 
 permissions:
@@ -20,17 +20,20 @@ jobs:
       - name: Select drafts
         id: drafts
         shell: bash
+        env:
+          INPUT_DRAFTS: ${{ inputs.drafts }}
         run: |
           set -euo pipefail
-          if [[ -n "${{ inputs.draft }}" ]]; then
-            file="devlog/drafts/${{ inputs.draft }}"
-            test -f "$file"
-            echo "files=$file" >> "$GITHUB_OUTPUT"
-          else
-            files=$(find devlog/drafts -maxdepth 1 -type f -name '*.md' | sort | tr '\n' ' ')
-            test -n "$files"
-            echo "files=$files" >> "$GITHUB_OUTPUT"
-          fi
+          files=""
+          IFS=',' read -ra names <<< "$INPUT_DRAFTS"
+          for name in "${names[@]}"; do
+            name="$(echo "$name" | xargs)"
+            [[ "$name" != */* ]] || { echo "ファイル名のみ指定してください: $name" >&2; exit 1; }
+            file="devlog/drafts/$name"
+            test -f "$file" || { echo "見つかりません: $file" >&2; exit 1; }
+            files+="$file "
+          done
+          echo "files=$files" >> "$GITHUB_OUTPUT"
 
       - name: Publish as Hatena drafts
         env:
